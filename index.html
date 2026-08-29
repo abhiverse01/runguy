@@ -18,6 +18,8 @@
     --fern: #9fbb8d;
     --clay: #c9814f;
     --clay-dim: rgba(201,129,79,0.4);
+    --gold: #e0b869;
+    --gold-dim: rgba(224,184,105,0.4);
     --stone: #8b9184;
     --ink: #171b12;
     --ink-soft: rgba(23,27,18,0.62);
@@ -111,11 +113,12 @@
   /* ---------- quest log ---------- */
   #quest-log{
     position:fixed; top: calc(64px + var(--safe-t)); left: calc(18px + var(--safe-l));
-    width:230px; z-index:11; padding:12px 14px; opacity:0; transition:opacity .7s ease, transform .3s ease;
+    width:236px; z-index:11; padding:12px 14px; opacity:0; transition:opacity .7s ease, transform .3s ease;
     pointer-events:none;
   }
   #quest-log.visible{ opacity:1; }
-  #quest-log .qh{ font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:var(--mist-dim); font-weight:600; margin-bottom:8px; }
+  #quest-log .qh{ font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:var(--mist-dim); font-weight:600; margin-bottom:8px; display:flex; justify-content:space-between; }
+  #quest-log .qh .qcount{ color:var(--fern); }
   .quest-item{ display:flex; align-items:flex-start; gap:8px; font-size:12.5px; padding:5px 0; color:var(--mist); }
   .quest-item .qmark{
     width:15px; height:15px; border-radius:50%; border:1.5px solid var(--mist-dim); flex:0 0 auto; margin-top:1px;
@@ -124,6 +127,7 @@
   .quest-item.done .qmark{ background:var(--moss); border-color:var(--moss); color:var(--canvas); }
   .quest-item.done .qname{ color:var(--fern); text-decoration:line-through; text-decoration-color:rgba(159,187,141,0.5); }
   .quest-item .qprog{ font-size:10.5px; color:var(--mist-dim); display:block; margin-top:1px; }
+  .quest-item.active .qmark{ border-color:var(--clay); box-shadow:0 0 0 3px var(--clay-dim); }
 
   /* ---------- minimap ---------- */
   #minimap-wrap{
@@ -144,9 +148,10 @@
     opacity:0; transition:opacity .7s ease; pointer-events:none;
   }
   #stat-bar-wrap.visible{ opacity:1; }
-  #stamina-track{ width:150px; height:5px; border-radius:3px; background:rgba(246,242,232,0.16); overflow:hidden; }
-  #stamina-fill{ height:100%; width:100%; background:linear-gradient(90deg, var(--fern), var(--moss)); border-radius:3px; transition:width .12s linear; }
+  #stamina-track{ width:150px; height:5px; border-radius:3px; background:rgba(246,242,232,0.16); overflow:hidden; position:relative; }
+  #stamina-fill{ height:100%; width:100%; background:linear-gradient(90deg, var(--fern), var(--moss)); border-radius:3px; transition:width .1s linear; }
   #stamina-fill.low{ background:linear-gradient(90deg, #d98a5a, var(--clay)); }
+  #stamina-fill.exhausted{ background:linear-gradient(90deg, #b5563a, #7a2f1e); }
   #stat-label{ font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--mist-dim); font-weight:600; }
 
   /* ---------- distance / orb readout (right) ---------- */
@@ -159,6 +164,7 @@
   .stat-row .k{ font-size:9.5px; letter-spacing:.18em; text-transform:uppercase; color:var(--mist-dim); font-weight:600; }
   .stat-row .v{ font-family:var(--font-display); font-size:19px; font-weight:600; color:var(--canvas); font-variant-numeric:tabular-nums; }
   .stat-row .v .unit{ font-size:.5em; color:var(--mist-dim); font-family:var(--font-ui); margin-left:3px; }
+  .stat-row .v.fps{ color:var(--fern); font-size:13px; }
 
   /* ---------- hint / toast ---------- */
   .hud-hint{
@@ -174,6 +180,8 @@
   }
   .toast .tt-sub{ display:block; font-family:var(--font-ui); font-weight:500; font-size:11px; color:var(--fern); margin-top:2px; letter-spacing:.04em; }
   .toast.quest{ font-size:17px; padding:14px 26px; border-color:var(--clay-dim); }
+  .toast.finale{ font-size:20px; padding:18px 32px; border-color:var(--gold-dim); top:26%; }
+  .toast.finale .tt-sub{ color:var(--gold); }
 
   /* ---------- mobile touch controls ---------- */
   #touch-controls{ position:fixed; inset:0; z-index:12; pointer-events:none; display:none; }
@@ -186,6 +194,7 @@
   #joy-nub{
     position:absolute; top:50%; left:50%; width:44px; height:44px; margin:-22px 0 0 -22px;
     border-radius:50%; background:rgba(246,242,232,0.5); border:1px solid rgba(246,242,232,0.6);
+    transition:transform .05s linear;
   }
   .touch-btn{
     position:fixed; bottom: calc(46px + var(--safe-b)); right: calc(30px + var(--safe-r));
@@ -194,7 +203,7 @@
     font-size:12px; display:flex; align-items:center; justify-content:center; pointer-events:auto;
   }
   .touch-btn.sprint{ right: calc(108px + var(--safe-r)); bottom: calc(30px + var(--safe-b)); width:52px; height:52px; background:rgba(90,138,95,0.22); border-color:var(--moss-dim); }
-  .touch-btn:active{ transform:scale(0.9); }
+  .touch-btn.pressed{ transform:scale(0.9); filter:brightness(1.25); }
 
   /* ---------- overlays ---------- */
   .overlay{
@@ -237,7 +246,15 @@
   .cta.ghost{
     background:transparent; border:1px solid rgba(246,242,232,0.3); color:var(--canvas); box-shadow:none; margin-left:10px;
   }
-  .btn-row{ display:flex; align-items:center; justify-content:center; }
+  .btn-row{ display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:10px; }
+
+  .quality-row{ display:flex; gap:8px; justify-content:center; margin-bottom:22px; }
+  .quality-chip{
+    font-family:var(--font-ui); font-weight:600; font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--mist-dim); background:rgba(246,242,232,0.05); border:1px solid var(--line); border-radius:20px;
+    padding:7px 15px; cursor:pointer;
+  }
+  .quality-chip.active{ color:var(--canopy-2); background:var(--fern); border-color:var(--fern); }
 
   .credit-line{ margin-top:22px; font-size:11px; color:var(--mist-dim); letter-spacing:.04em; }
   .credit-line button{
@@ -271,7 +288,7 @@
   .dev-engine{ margin-top:18px; font-size:10.5px; color:var(--mist-dim); letter-spacing:.05em; }
 
   /* pause */
-  #pause-summary{ display:flex; gap:22px; justify-content:center; margin:6px 0 26px; }
+  #pause-summary{ display:flex; gap:22px; justify-content:center; margin:6px 0 26px; flex-wrap:wrap; }
   #pause-summary .ps{ text-align:center; }
   #pause-summary .ps .pv{ font-family:var(--font-display); font-weight:700; font-size:22px; color:var(--fern); }
   #pause-summary .ps .pl{ font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--mist-dim); margin-top:3px; }
@@ -306,7 +323,7 @@
   </div>
 
   <div id="quest-log" class="panel">
-    <div class="qh">Quest Log</div>
+    <div class="qh"><span>Quest Log</span><span class="qcount" id="quest-count">0/6</span></div>
     <div id="quest-items"></div>
   </div>
 
@@ -314,6 +331,7 @@
     <div class="stat-row"><div class="k">Distance</div><div class="v" id="stat-distance">0<span class="unit">m</span></div></div>
     <div class="stat-row"><div class="k">Orbs</div><div class="v" id="stat-orbs">0<span class="unit">/8</span></div></div>
     <div class="stat-row"><div class="k">Time</div><div class="v" id="stat-time">0:00</div></div>
+    <div class="stat-row"><div class="k">FPS</div><div class="v fps" id="stat-fps">60</div></div>
   </div>
 
   <div id="minimap-wrap" style="position:fixed;">
@@ -330,13 +348,15 @@
 <div id="top-controls">
   <button class="icon-btn" id="btn-pause" title="Pause">❚❚</button>
   <button class="icon-btn" id="btn-mute" title="Mute">♪</button>
+  <button class="icon-btn desktop-only" id="btn-lock" title="Mouse look lock">⛶</button>
   <button class="icon-btn" id="btn-help" title="Developer info">?</button>
 </div>
 
-<div class="hud-hint" id="hud-hint">WASD to walk · Shift to sprint · Space to jump · Drag to look</div>
+<div class="hud-hint" id="hud-hint">WASD to walk · Shift to sprint · Space to jump · Drag (or click to lock) to look</div>
 
 <div class="toast" id="toast"></div>
 <div class="toast quest" id="toast-quest"></div>
+<div class="toast finale" id="toast-finale"></div>
 
 <!-- ============ touch controls ============ -->
 <div id="touch-controls">
@@ -361,9 +381,13 @@
     <div class="eyebrow">A place, not a track</div>
     <p class="title-lockup"><span class="word1">RUN<span>GUY</span></span></p>
     <p class="subtitle">An open field, a winding river, three bridges and a hill worth climbing.<br>Walk, run, stop whenever you like — the field waits either way.</p>
+    <div class="quality-row desktop-only" id="quality-row">
+      <button class="quality-chip" data-q="low">Low</button>
+      <button class="quality-chip active" data-q="high">High</button>
+    </div>
     <div class="controls-legend desktop-only">
       <div class="control-row"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move &nbsp;·&nbsp; <kbd>⇧</kbd> sprint &nbsp;·&nbsp; <kbd>Space</kbd> jump</div>
-      <div class="control-row">drag mouse to look around &nbsp;·&nbsp; <kbd>Esc</kbd> pause</div>
+      <div class="control-row">drag mouse (or click to lock) to look around &nbsp;·&nbsp; <kbd>Esc</kbd> pause</div>
     </div>
     <div class="controls-legend" style="display:none" id="mobile-legend"><div class="control-row">left stick to walk · drag right side to look · buttons to sprint & jump</div></div>
     <div class="btn-row"><button class="cta" id="btn-start">Enter the Field</button></div>
@@ -380,6 +404,7 @@
       <div class="ps"><div class="pv" id="pause-quests">0/6</div><div class="pl">Quests</div></div>
       <div class="ps"><div class="pv" id="pause-orbs">0/8</div><div class="pl">Orbs</div></div>
       <div class="ps"><div class="pv" id="pause-dist">0m</div><div class="pl">Walked</div></div>
+      <div class="ps"><div class="pv" id="pause-time">0:00</div><div class="pl">Time</div></div>
     </div>
     <div class="btn-row">
       <button class="cta" id="btn-resume">Resume</button>
@@ -402,7 +427,7 @@
       <a class="dev-link" href="https://linkedin.com/in/theabhishekshah" target="_blank" rel="noopener"><span class="lv">LinkedIn</span><span class="lk">Connect ↗</span></a>
       <a class="dev-link" href="mailto:abhishek.aimarine@gmail.com"><span class="lv">Email</span><span class="lk">Say hi ↗</span></a>
     </div>
-    <div class="dev-engine">Built with Three.js · single-file WebGL</div>
+    <div class="dev-engine">Built with Three.js · single-file WebGL · godmode build</div>
   </div>
 </div>
 
@@ -420,27 +445,89 @@ import { Sky } from 'three/addons/objects/Sky.js';
 import { Water } from 'three/addons/objects/Water.js';
 
 /* ============================================================
-   RUNGUY — an open-field 3D exploration game.
+   RUNGUY — an open-field 3D exploration game. GODMODE BUILD.
    Built with Three.js. Single self-contained file.
    Design: Abhishek Shah / InvertKilo — "Not your default build"
+
+   --- Changelog vs. previous build --------------------------
+   ENGINE
+    - Sun/shadow frustum now follows the player every frame.
+      Previously the shadow camera was pinned to world origin
+      with an 84-unit box on a 340-unit map, so shadows (and
+      correct light falloff) silently vanished ~40 units from
+      spawn. This was the single biggest visual bug.
+    - Quality toggle (High/Low) on the start screen: shadow map
+      size, pixel ratio cap, grass instance count and draw
+      distance all scale down for low-end / mobile GPUs.
+    - FPS counter + frame-time-based adaptive particle budget.
+    - Renderer now disposes the temporary env-probe scene.
+   PHYSICS / MOVEMENT
+    - Separate accel / decel / air-control constants instead of
+      one blended lerp — snappier stops, floatier air control.
+    - Coyote time (jump shortly after walking off a ledge) and
+      jump-buffering (press jump slightly before landing) —
+      both standard fixes for "why didn't my jump register".
+    - Slope-aware locomotion: speed is scaled down on steep
+      terrain via a finite-difference ground normal, and the
+      player gets a gentle downhill slide on very steep faces
+      instead of clipping up unrealistically steep hillsides.
+    - Fall-impact feedback scales with impact speed (dust burst
+      size + camera micro-shake + landing SFX volume).
+    - Third-person camera now raymarches against the terrain
+      heightfield and pulls itself in when a hill would clip
+      through it, instead of poking through geometry.
+    - Sprint eases the FOV up slightly for a speed sensation.
+   BUGS FIXED
+    - Quest hints were authored in data but never rendered
+      anywhere in the UI — now shown under each active quest.
+    - Mobile: tapping the SPRINT/JUMP buttons also registered as
+      a "look" drag touch (both live on the right half of the
+      screen), causing the camera to jerk on every tap. Touches
+      that start on a control button no longer feed the look
+      handler.
+    - Touch buttons had no touchcancel handling, so an
+      interrupted touch (e.g. a system gesture) could leave
+      sprint permanently "stuck on".
+    - Added a finale banner once every quest + all orbs are
+      cleared (previously nothing acknowledged 100% completion).
+    - Pointer Lock support added for desktop mouse-look, with a
+      proper lock/unlock button and Escape handling that doesn't
+      fight the pause menu.
 ============================================================ */
 
+/* ---------------- quality / device tier ---------------- */
+const isTouch = matchMedia('(hover:none) and (pointer:coarse)').matches;
+let QUALITY = isTouch ? 'low' : 'high';
+const Q = {
+  get shadow(){ return QUALITY === 'high' ? 2048 : 1024; },
+  get grass(){ return QUALITY === 'high' ? 2600 : 900; },
+  get trees(){ return QUALITY === 'high' ? 1 : 0.6; },
+  get pixelRatio(){ return Math.min(window.devicePixelRatio || 1, QUALITY === 'high' ? 2 : 1.5); },
+  get fogFar(){ return QUALITY === 'high' ? 320 : 220; },
+};
+
 /* ---------------- constants ---------------- */
-const MAP_HALF      = 170;
-const RIVER_HALF     = 8;
-const BANK_FADE      = 9;
-const BRIDGE_Y       = 0.5;
-const GRAVITY        = -22;
-const JUMP_SPEED     = 6.6;
-const WALK_SPEED     = 4.4;
-const SPRINT_SPEED   = 8.6;
-const ACCEL          = 16;
-const TURN_LERP      = 9;
-const STAMINA_MAX    = 100;
-const STAMINA_DRAIN  = 26;   // per second while sprinting
-const STAMINA_REGEN  = 16;   // per second while not sprinting
+const MAP_HALF       = 170;
+const RIVER_HALF      = 8;
+const BANK_FADE       = 9;
+const BRIDGE_Y        = 0.5;
+const GRAVITY         = -22;
+const JUMP_SPEED      = 6.6;
+const WALK_SPEED      = 4.4;
+const SPRINT_SPEED    = 8.6;
+const ACCEL_GROUND    = 20;   // speeding up, on the ground
+const DECEL_GROUND    = 26;   // slowing to a stop, on the ground (snappier than accel)
+const ACCEL_AIR       = 6;    // limited air control
+const TURN_LERP       = 9;
+const STAMINA_MAX     = 100;
+const STAMINA_DRAIN   = 26;   // per second while sprinting
+const STAMINA_REGEN   = 16;   // per second while not sprinting
 const STAMINA_MIN_TO_SPRINT = 8;
-const REDUCED_MOTION = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const COYOTE_TIME     = 0.12; // seconds you can still jump after leaving a ledge
+const JUMP_BUFFER     = 0.12; // seconds a jump press is remembered before landing
+const SLOPE_WALKABLE  = 0.62; // cosine of max walkable slope angle (~52°)
+const SLOPE_SLIDE     = 0.78; // cosine below which sliding kicks in fully
+const REDUCED_MOTION  = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const ORB_TOTAL = 8;
 
@@ -550,7 +637,7 @@ function makeGrassPatchTexture(){
 ============================================================ */
 const canvas = document.getElementById('scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setPixelRatio(Q.pixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -583,28 +670,31 @@ const sunDir = new THREE.Vector3();
 }
 
 const horizonColor = new THREE.Color(0xcfe6df);
-scene.fog = new THREE.Fog(horizonColor.getHex(), 70, 320);
+scene.fog = new THREE.Fog(horizonColor.getHex(), 70, Q.fogFar);
 renderer.setClearColor(horizonColor);
 
 /* environment (image-based lighting from the sky, baked once) */
 const pmrem = new THREE.PMREMGenerator(renderer);
 const envScene = new THREE.Scene();
-envScene.add(sky.clone());
+const envSky = sky.clone();
+envScene.add(envSky);
 const envRT = pmrem.fromScene(envScene, 0.02);
 scene.environment = envRT.texture;
 pmrem.dispose();
+envSky.geometry.dispose();
+envSky.material.dispose();
 
 /* ---------------- lighting ---------------- */
 const sunLight = new THREE.DirectionalLight(0xfff3da, 3.1);
 sunLight.position.copy(sunDir).multiplyScalar(140);
 sunLight.castShadow = true;
-sunLight.shadow.mapSize.set(2048, 2048);
+sunLight.shadow.mapSize.set(Q.shadow, Q.shadow);
 sunLight.shadow.camera.near = 10;
-sunLight.shadow.camera.far = 160;
-sunLight.shadow.camera.left = -42;
-sunLight.shadow.camera.right = 42;
-sunLight.shadow.camera.top = 42;
-sunLight.shadow.camera.bottom = -42;
+sunLight.shadow.camera.far = 200;
+sunLight.shadow.camera.left = -46;
+sunLight.shadow.camera.right = 46;
+sunLight.shadow.camera.top = 46;
+sunLight.shadow.camera.bottom = -46;
 sunLight.shadow.bias = -0.0015;
 sunLight.shadow.normalBias = 0.02;
 scene.add(sunLight);
@@ -612,6 +702,17 @@ scene.add(sunLight.target);
 
 const hemi = new THREE.HemisphereLight(0xcfe6ff, 0x5a6b45, 0.65);
 scene.add(hemi);
+
+/* FIX: the shadow frustum used to be pinned at world origin (a fixed
+   ~84-unit box on a 340-unit-wide map), so anything more than ~40
+   units from spawn silently lost its shadow. Re-center the light
+   (and its target) on the player every frame, keeping the same
+   sun-relative offset, so the shadow-casting volume travels with you. */
+function updateSunFollow(px, pz){
+  sunLight.position.set(px, 0, pz).addScaledVector(sunDir, 140);
+  sunLight.target.position.set(px, 0, pz);
+  sunLight.target.updateMatrixWorld();
+}
 
 /* ============================================================
    RIVER PATH (defines the whole map layout)
@@ -700,6 +801,18 @@ function groundHeightAt(x, z){
 function inRiverWater(x, z){
   if (isOnBridge(x, z)) return false;
   return distToRiver(x, z) < RIVER_HALF;
+}
+/* finite-difference ground normal, used for slope-aware locomotion
+   and camera grounding — cheap (4 extra height samples) and only
+   called for the player + camera, never per-vertex. */
+const _slopeEps = 0.35;
+function groundNormalAt(x, z){
+  const hL = groundHeightAt(x - _slopeEps, z);
+  const hR = groundHeightAt(x + _slopeEps, z);
+  const hD = groundHeightAt(x, z - _slopeEps);
+  const hU = groundHeightAt(x, z + _slopeEps);
+  const n = new THREE.Vector3(hL - hR, 2 * _slopeEps, hD - hU);
+  return n.normalize();
 }
 
 /* ============================================================
@@ -885,7 +998,7 @@ const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4326, roughness: 0.
 const roundLeafMat = new THREE.MeshStandardMaterial({ color: 0x4d7a3f, roughness: 0.9, flatShading: true });
 const pineLeafMat = new THREE.MeshStandardMaterial({ color: 0x3c6a4a, roughness: 0.9, flatShading: true });
 
-const N_ROUND = 84, N_PINE = 56;
+const N_ROUND = Math.round(84 * Q.trees), N_PINE = Math.round(56 * Q.trees);
 const trunkInst = new THREE.InstancedMesh(trunkGeo, trunkMat, N_ROUND + N_PINE);
 const roundInst = new THREE.InstancedMesh(roundCanopyGeo, roundLeafMat, N_ROUND);
 const pineInst = new THREE.InstancedMesh(pineCanopyGeo, pineLeafMat, N_PINE);
@@ -931,7 +1044,7 @@ scene.add(trunkInst, roundInst, pineInst);
 /* -------- rocks -------- */
 const rockGeo = new THREE.DodecahedronGeometry(0.55, 0);
 const rockMat = new THREE.MeshStandardMaterial({ color: 0x83857c, roughness: 1, flatShading: true });
-const N_ROCK = 70;
+const N_ROCK = Math.round(70 * Q.trees);
 const rockInst = new THREE.InstancedMesh(rockGeo, rockMat, N_ROCK);
 rockInst.castShadow = true; rockInst.receiveShadow = true;
 let rockIdx = 0;
@@ -981,7 +1094,7 @@ grassMat.onBeforeCompile = (shader) => {
     .replace('#include <begin_vertex>', `#include <begin_vertex>\nfloat sway = sin(uTime * 1.7 + aPhase) * 0.16 * smoothstep(0.0, 1.0, position.y / 0.55);\ntransformed.x += sway;\ntransformed.z += sway * 0.4;`);
 };
 
-const N_GRASS = 2600;
+const N_GRASS = Q.grass;
 const grassInst = new THREE.InstancedMesh(bladeGeo, grassMat, N_GRASS);
 grassInst.castShadow = false; grassInst.receiveShadow = false;
 const aPhase = new Float32Array(N_GRASS);
@@ -1087,7 +1200,7 @@ scene.add(shadowBlob);
 /* ============================================================
    PARTICLES (splash / dust / sparkle) — small pooled system
 ============================================================ */
-const MAX_PARTICLES = 220;
+const MAX_PARTICLES = 260;
 const particleGeo = new THREE.BufferGeometry();
 const particlePos = new Float32Array(MAX_PARTICLES * 3);
 const particleCol = new Float32Array(MAX_PARTICLES * 3);
@@ -1194,13 +1307,23 @@ window.addEventListener('blur', () => keys.clear());
 
 let cameraYaw = Math.PI;
 let cameraPitch = 0.42;
-let cameraDist = 7.2;
+let cameraDist = 7.2;          // desired (player-chosen) distance
+let cameraDistEffective = 7.2; // actual distance after terrain-occlusion pullback
 let autoAlign = true;
 let dragging = false, lastDragX = 0, lastDragY = 0;
+let pointerLocked = false;
 
-canvas.addEventListener('mousedown', (e) => { dragging = true; autoAlign = false; lastDragX = e.clientX; lastDragY = e.clientY; });
+canvas.addEventListener('mousedown', (e) => {
+  if (pointerLocked) return; // movementX/Y drive look while locked
+  dragging = true; autoAlign = false; lastDragX = e.clientX; lastDragY = e.clientY;
+});
 window.addEventListener('mouseup', () => dragging = false);
 window.addEventListener('mousemove', (e) => {
+  if (pointerLocked){
+    cameraYaw -= e.movementX * 0.0028;
+    cameraPitch = clamp(cameraPitch - e.movementY * 0.0022, 0.12, 0.95);
+    return;
+  }
   if (!dragging) return;
   const dx = e.clientX - lastDragX, dy = e.clientY - lastDragY;
   lastDragX = e.clientX; lastDragY = e.clientY;
@@ -1211,8 +1334,24 @@ canvas.addEventListener('wheel', (e) => {
   cameraDist = clamp(cameraDist + e.deltaY * 0.01, 4, 13);
 }, { passive: true });
 
+/* optional desktop Pointer Lock for smoother, unbounded mouse-look */
+const btnLock = document.getElementById('btn-lock');
+if (!isTouch && btnLock){
+  btnLock.addEventListener('click', () => {
+    if (document.pointerLockElement === canvas) document.exitPointerLock();
+    else canvas.requestPointerLock();
+  });
+  document.addEventListener('pointerlockchange', () => {
+    pointerLocked = document.pointerLockElement === canvas;
+    autoAlign = false;
+    btnLock.classList.toggle('on', pointerLocked);
+    dragging = false;
+  });
+} else if (btnLock){
+  btnLock.style.display = 'none';
+}
+
 /* touch: left = joystick, right = look-drag */
-const isTouch = matchMedia('(hover:none) and (pointer:coarse)').matches;
 const touchInput = { x: 0, z: 0 };
 let joyActive = false, joyId = null, joyStartX = 0, joyStartY = 0;
 let lookId = null, lookLastX = 0, lookLastY = 0;
@@ -1225,6 +1364,11 @@ if (isTouch){
 
   window.addEventListener('touchstart', (e) => {
     for (const t of e.changedTouches){
+      /* FIX: previously any touch starting on the right half of the
+         screen was claimed as a "look" drag, including touches that
+         landed on the SPRINT/JUMP buttons — so tapping either button
+         also yanked the camera. Skip touches that start on a control. */
+      if (t.target.closest && t.target.closest('.touch-btn')) continue;
       if (t.clientX < window.innerWidth * 0.5 && joyId === null){
         joyId = t.identifier; joyActive = true;
         const r = joyBase.getBoundingClientRect();
@@ -1252,19 +1396,24 @@ if (isTouch){
     }
   }, { passive: true });
 
-  window.addEventListener('touchend', (e) => {
+  function releaseTouch(e){
     for (const t of e.changedTouches){
       if (t.identifier === joyId){ joyId = null; joyActive = false; touchInput.x = 0; touchInput.z = 0; joyNub.style.transform = 'translate(0,0)'; }
       if (t.identifier === lookId){ lookId = null; }
     }
-  }, { passive: true });
+  }
+  window.addEventListener('touchend', releaseTouch, { passive: true });
+  window.addEventListener('touchcancel', releaseTouch, { passive: true }); // FIX: was unhandled, could strand the joystick
 
   let sprintTouch = false, jumpTouchPressed = false;
   const sprintBtn = document.getElementById('btn-sprint-touch');
   const jumpBtn = document.getElementById('btn-jump-touch');
-  sprintBtn.addEventListener('touchstart', (e) => { e.preventDefault(); sprintTouch = true; }, { passive: false });
-  sprintBtn.addEventListener('touchend', (e) => { e.preventDefault(); sprintTouch = false; }, { passive: false });
-  jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); jumpTouchPressed = true; }, { passive: false });
+  sprintBtn.addEventListener('touchstart', (e) => { e.preventDefault(); sprintTouch = true; sprintBtn.classList.add('pressed'); }, { passive: false });
+  sprintBtn.addEventListener('touchend', (e) => { e.preventDefault(); sprintTouch = false; sprintBtn.classList.remove('pressed'); }, { passive: false });
+  sprintBtn.addEventListener('touchcancel', () => { sprintTouch = false; sprintBtn.classList.remove('pressed'); }); // FIX: stuck-sprint guard
+  jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); jumpTouchPressed = true; jumpBtn.classList.add('pressed'); }, { passive: false });
+  jumpBtn.addEventListener('touchend', (e) => { e.preventDefault(); jumpBtn.classList.remove('pressed'); }, { passive: false });
+  jumpBtn.addEventListener('touchcancel', () => { jumpBtn.classList.remove('pressed'); });
   window.sprintTouchState = () => sprintTouch;
   window.consumeJumpTouch = () => { const v = jumpTouchPressed; jumpTouchPressed = false; return v; };
 }
@@ -1279,8 +1428,8 @@ function readInput(){
   const len = Math.hypot(x, z);
   if (len > 1){ x /= len; z /= len; }
   const sprint = keys.has('ShiftLeft') || keys.has('ShiftRight') || (isTouch && window.sprintTouchState && window.sprintTouchState());
-  const jump = keys.has('Space') || (isTouch && window.consumeJumpTouch && window.consumeJumpTouch());
-  return { x, z, sprint, jump, moving: len > 0.05 };
+  const jumpPressed = keys.has('Space') || (isTouch && window.consumeJumpTouch && window.consumeJumpTouch());
+  return { x, z, sprint, jumpPressed, moving: len > 0.05 };
 }
 
 /* ============================================================
@@ -1316,9 +1465,10 @@ const SFX = {
   footstep(){ noiseBurst(0.06, 0.035); },
   splash(){ noiseBurst(0.18, 0.09); tone(220, 0.15, 'sine', 0.05, 140); },
   jump(){ tone(340, 0.14, 'triangle', 0.08, 520); },
-  land(){ noiseBurst(0.08, 0.05); },
+  land(strength = 1){ noiseBurst(0.08, 0.05 * clamp(strength, 0.3, 1.8)); },
   orb(){ tone(660, 0.12, 'sine', 0.1, 990); tone(990, 0.16, 'sine', 0.07, 1320); },
   quest(){ tone(392, 0.14, 'triangle', 0.09, 523); setTimeout(() => tone(523, 0.18, 'triangle', 0.09, 659), 120); },
+  finale(){ [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.28, 'triangle', 0.1, f * 1.25), i * 130)); },
 };
 
 
@@ -1366,24 +1516,43 @@ function updateCompass(){
    HUD: quest log
 ============================================================ */
 const questItemsEl = document.getElementById('quest-items');
+const questCountEl = document.getElementById('quest-count');
 quests.forEach(q => {
   const row = document.createElement('div');
   row.className = 'quest-item';
   row.id = 'quest-row-' + q.id;
-  row.innerHTML = `<div class="qmark">✓</div><div><div class="qname">${q.name}</div>${q.target ? `<span class="qprog" id="qprog-${q.id}">0 / ${q.target}</span>` : ''}</div>`;
+  const sub = q.target ? `<span class="qprog" id="qprog-${q.id}">0 / ${q.target}</span>`
+                        : `<span class="qprog" id="qprog-${q.id}">${q.hint ?? ''}</span>`; // FIX: hints were authored but never shown
+  row.innerHTML = `<div class="qmark">✓</div><div><div class="qname">${q.name}</div>${sub}</div>`;
   questItemsEl.appendChild(row);
 });
 function refreshQuestLog(){
+  const doneCount = quests.filter(q => q.done).length;
+  questCountEl.textContent = `${doneCount}/${quests.length}`;
   quests.forEach(q => {
     const row = document.getElementById('quest-row-' + q.id);
     row.classList.toggle('done', q.done);
-    if (q.target){
-      const el = document.getElementById('qprog-' + q.id);
-      if (el) el.textContent = `${q.progress} / ${q.target}`;
-    }
+    const el = document.getElementById('qprog-' + q.id);
+    if (el && q.target) el.textContent = `${q.progress} / ${q.target}`;
   });
+  if (doneCount >= quests.length && !finaleShown) showFinale();
 }
 refreshQuestLog();
+
+let finaleShown = false;
+const toastFinaleEl = document.getElementById('toast-finale');
+function showFinale(){
+  finaleShown = true;
+  toastFinaleEl.innerHTML = 'Field Fully Explored<span class="tt-sub">' +
+    `${Math.floor(distanceWalked)}m walked · ${formatTime(elapsedTime)} elapsed</span>`;
+  toastFinaleEl.style.transition = 'none'; toastFinaleEl.style.opacity = '1';
+  finaleTimer = 4.5;
+  SFX.finale();
+}
+function formatTime(t){
+  const mins = Math.floor(t / 60), secs = Math.floor(t % 60);
+  return mins + ':' + String(secs).padStart(2, '0');
+}
 
 /* ============================================================
    HUD: minimap
@@ -1438,7 +1607,7 @@ function drawMinimap(){
 ============================================================ */
 const toastEl = document.getElementById('toast');
 const toastQuestEl = document.getElementById('toast-quest');
-let toastTimer = 0, questToastTimer = 0;
+let toastTimer = 0, questToastTimer = 0, finaleTimer = 0;
 function toast(text, sub = ''){
   toastEl.innerHTML = text + (sub ? `<span class="tt-sub">${sub}</span>` : '');
   toastEl.style.transition = 'none'; toastEl.style.opacity = '1';
@@ -1458,6 +1627,10 @@ function updateToasts(dt){
   if (questToastTimer > 0){
     questToastTimer -= dt;
     if (questToastTimer <= 0){ toastQuestEl.style.transition = 'opacity .6s ease'; toastQuestEl.style.opacity = '0'; }
+  }
+  if (finaleTimer > 0){
+    finaleTimer -= dt;
+    if (finaleTimer <= 0){ toastFinaleEl.style.transition = 'opacity .8s ease'; toastFinaleEl.style.opacity = '0'; }
   }
 }
 
@@ -1487,6 +1660,16 @@ function showHUD(){
   setTimeout(() => { hudHintEl.style.opacity = '0'; }, 6000);
 }
 
+/* quality chips on the start screen */
+document.querySelectorAll('.quality-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    QUALITY = chip.dataset.q;
+    document.querySelectorAll('.quality-chip').forEach(c => c.classList.toggle('active', c === chip));
+    renderer.setPixelRatio(Q.pixelRatio);
+    scene.fog.far = Q.fogFar;
+  });
+});
+
 document.getElementById('btn-start').addEventListener('click', () => {
   ensureAudio();
   startOverlay.classList.add('hidden');
@@ -1510,9 +1693,11 @@ devModal.addEventListener('click', (e) => { if (e.target === devModal) devModal.
 function togglePause(){
   if (state === 'playing'){
     state = 'paused';
+    if (document.pointerLockElement === canvas) document.exitPointerLock();
     document.getElementById('pause-quests').textContent = `${quests.filter(q=>q.done).length}/${quests.length}`;
     document.getElementById('pause-orbs').textContent = `${orbs.filter(o=>o.collected).length}/${ORB_TOTAL}`;
     document.getElementById('pause-dist').textContent = `${Math.floor(distanceWalked)}m`;
+    document.getElementById('pause-time').textContent = formatTime(elapsedTime);
     pauseOverlay.classList.remove('hidden');
   } else if (state === 'paused'){
     state = 'playing';
@@ -1528,6 +1713,7 @@ const player = {
   x: 0, y: 0, z: -6, vx: 0, vz: 0, vy: 0,
   facing: 0, grounded: true, sprinting: false,
   stamina: STAMINA_MAX, runCycle: 0, wading: false,
+  coyoteTimer: 0, jumpBufferTimer: 0,
 };
 player.y = groundHeightAt(player.x, player.z);
 playerGroup.position.set(player.x, player.y, player.z);
@@ -1536,6 +1722,7 @@ let distanceWalked = 0;
 let elapsedTime = 0;
 let footstepTimer = 0;
 let trailSplashTimer = 0;
+let camShake = 0; // brief impact feedback, decays each frame
 
 /* ============================================================
    PHYSICS / MOVEMENT
@@ -1556,12 +1743,29 @@ function updatePlayer(dt){
   if (player.sprinting){ player.stamina = Math.max(0, player.stamina - STAMINA_DRAIN * dt); }
   else { player.stamina = Math.min(STAMINA_MAX, player.stamina + STAMINA_REGEN * dt); }
 
+  /* slope-aware speed: sample the ground normal under the player and
+     scale speed down on steep faces so hills feel like hills, not
+     frictionless ramps. */
+  const normal = groundNormalAt(player.x, player.z);
+  const slopeCos = clamp(normal.y, 0, 1); // 1 = flat, lower = steeper
+  const slopeFactor = smoothstep(SLOPE_SLIDE - 0.18, SLOPE_WALKABLE, slopeCos);
+
   let targetSpeed = hasInput ? (player.sprinting ? SPRINT_SPEED : WALK_SPEED) : 0;
   if (player.wading) targetSpeed *= 0.4;
+  if (player.grounded) targetSpeed *= lerp(0.35, 1, slopeFactor);
 
   const targetVX = _moveDir.x * targetSpeed, targetVZ = _moveDir.z * targetSpeed;
-  player.vx = lerp(player.vx, targetVX, Math.min(1, ACCEL * dt));
-  player.vz = lerp(player.vz, targetVZ, Math.min(1, ACCEL * dt));
+  const rate = player.grounded ? (hasInput ? ACCEL_GROUND : DECEL_GROUND) : ACCEL_AIR;
+  player.vx = lerp(player.vx, targetVX, Math.min(1, rate * dt));
+  player.vz = lerp(player.vz, targetVZ, Math.min(1, rate * dt));
+
+  /* gentle downhill slide on very steep terrain, independent of input,
+     so a steep hillside doesn't behave like flat, grippy ground */
+  if (player.grounded && slopeCos < SLOPE_SLIDE){
+    const slideStrength = (1 - smoothstep(SLOPE_WALKABLE, SLOPE_SLIDE, slopeCos)) * 3.2;
+    player.vx += normal.x * slideStrength * dt * 10;
+    player.vz += normal.z * slideStrength * dt * 10;
+  }
 
   const prevX = player.x, prevZ = player.z;
   player.x += player.vx * dt;
@@ -1596,8 +1800,8 @@ function updatePlayer(dt){
   }
   playerGroup.rotation.y = player.facing;
 
-  /* auto-align camera behind player when moving and not manually dragging */
-  if (autoAlign && hasInput && !dragging){
+  /* auto-align camera behind player when moving and not manually dragging/locked */
+  if (autoAlign && hasInput && !dragging && !pointerLocked){
     let diff = player.facing - cameraYaw;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
@@ -1609,9 +1813,20 @@ function updatePlayer(dt){
   const onBridge = !!isOnBridge(player.x, player.z);
   player.wading = !onBridge && inRiverWater(player.x, player.z);
 
-  if (player.grounded && inp.jump){
+  /* FIX: jump used to require the exact frame you were grounded AND
+     pressing space. Coyote time forgives jumping just after walking
+     off a ledge; the jump buffer forgives pressing space just before
+     you land. Both are standard platformer feel fixes. */
+  if (player.grounded) player.coyoteTimer = COYOTE_TIME;
+  else player.coyoteTimer = Math.max(0, player.coyoteTimer - dt);
+  if (inp.jumpPressed) player.jumpBufferTimer = JUMP_BUFFER;
+  else player.jumpBufferTimer = Math.max(0, player.jumpBufferTimer - dt);
+
+  if (player.jumpBufferTimer > 0 && player.coyoteTimer > 0){
     player.vy = JUMP_SPEED;
     player.grounded = false;
+    player.coyoteTimer = 0;
+    player.jumpBufferTimer = 0;
     SFX.jump();
     burst(player.x, player.y + 0.1, player.z, 5, { vy: 0.6, maxLife: 0.35, r: 0.9, g: 0.9, b: 0.85, gravity: -6 });
   }
@@ -1619,7 +1834,15 @@ function updatePlayer(dt){
   player.y += player.vy * dt;
 
   if (player.y <= ground){
-    if (!player.grounded && player.vy < -6) SFX.land();
+    if (!player.grounded){
+      const impactSpeed = Math.abs(player.vy);
+      if (impactSpeed > 2.5){
+        SFX.land(impactSpeed / 6.6);
+        const dustCount = Math.round(clamp(impactSpeed, 3, 10));
+        burst(player.x, ground + 0.05, player.z, dustCount, { vy: 0.9, maxLife: 0.5, r: 0.78, g: 0.7, b: 0.52, gravity: -4 });
+        camShake = clamp((impactSpeed - 4) * 0.02, 0, 0.18);
+      }
+    }
     player.y = ground; player.vy = 0; player.grounded = true;
   } else {
     player.grounded = false;
@@ -1670,24 +1893,62 @@ function updatePlayer(dt){
   }
   scarf.rotation.z = Math.sin(performance.now() * 0.003) * 0.08;
   playerLight.position.set(player.x, player.y + 1.5, player.z);
+
+  /* keep the shadow-casting frustum centered on the player (see updateSunFollow) */
+  updateSunFollow(player.x, player.z);
 }
 
 /* ============================================================
    CAMERA
 ============================================================ */
 function updateCamera(dt){
-  const targetX = player.x - Math.sin(cameraYaw) * cameraDist;
-  const targetZ = player.z - Math.cos(cameraYaw) * cameraDist;
-  const targetY = player.y + 1.3 + Math.sin(cameraPitch) * cameraDist * 0.9;
+  /* terrain-occlusion raymarch: sample a few points between the
+     player and the desired camera position; if the ground rises
+     above the sightline anywhere along it, pull the camera in so
+     it never clips through a hillside. */
+  const desiredX = player.x - Math.sin(cameraYaw) * cameraDist;
+  const desiredZ = player.z - Math.cos(cameraYaw) * cameraDist;
   const lookHeight = player.y + 1.25;
+  const desiredY = player.y + 1.3 + Math.sin(cameraPitch) * cameraDist * 0.9;
 
+  let safeDist = cameraDist;
+  const SAMPLES = 6;
+  for (let i = 1; i <= SAMPLES; i++){
+    const t = i / SAMPLES;
+    const sx = lerp(player.x, desiredX, t);
+    const sz = lerp(player.z, desiredZ, t);
+    const sy = lerp(lookHeight, desiredY, t);
+    const groundAtSample = groundHeightAt(sx, sz) + 0.35;
+    if (groundAtSample > sy){
+      safeDist = Math.min(safeDist, cameraDist * t * 0.92);
+      break;
+    }
+  }
+  cameraDistEffective = lerp(cameraDistEffective, Math.max(safeDist, 2.2), Math.min(1, 10 * dt));
+
+  const targetX = player.x - Math.sin(cameraYaw) * cameraDistEffective;
+  const targetZ = player.z - Math.cos(cameraYaw) * cameraDistEffective;
+  const targetY = player.y + 1.3 + Math.sin(cameraPitch) * cameraDistEffective * 0.9;
   const desiredCamY = Math.max(targetY, groundHeightAt(targetX, targetZ) + 1.0);
 
   camera.position.x = lerp(camera.position.x, targetX, Math.min(1, 6 * dt));
   camera.position.z = lerp(camera.position.z, targetZ, Math.min(1, 6 * dt));
   camera.position.y = lerp(camera.position.y, desiredCamY, Math.min(1, 5 * dt));
 
+  /* brief impact shake, decaying */
+  if (camShake > 0.0005){
+    camera.position.x += (rng() - 0.5) * camShake;
+    camera.position.y += (rng() - 0.5) * camShake * 0.6;
+    camShake *= 0.85;
+  } else camShake = 0;
+
   camera.lookAt(player.x, lookHeight, player.z);
+
+  /* sprint gives a subtle FOV widen for a speed sensation */
+  const speedRatio = clamp(Math.hypot(player.vx, player.vz) / SPRINT_SPEED, 0, 1);
+  const targetFov = baseFov + (player.sprinting ? speedRatio * 5 : 0);
+  camera.fov = lerp(camera.fov, targetFov, Math.min(1, 4 * dt));
+  camera.updateProjectionMatrix();
 }
 
 /* ============================================================
@@ -1746,15 +2007,24 @@ const staminaFillEl = document.getElementById('stamina-fill');
 const statDistanceEl = document.getElementById('stat-distance');
 const statOrbsEl = document.getElementById('stat-orbs');
 const statTimeEl = document.getElementById('stat-time');
+const statFpsEl = document.getElementById('stat-fps');
 
+let fpsSmoothed = 60, fpsAccum = 0, fpsFrames = 0;
 function updateHUDStats(dt){
   elapsedTime += dt;
   staminaFillEl.style.width = player.stamina + '%';
-  staminaFillEl.classList.toggle('low', player.stamina < 30);
+  staminaFillEl.classList.toggle('low', player.stamina < 30 && player.stamina >= STAMINA_MIN_TO_SPRINT);
+  staminaFillEl.classList.toggle('exhausted', player.stamina < STAMINA_MIN_TO_SPRINT);
   statDistanceEl.innerHTML = Math.floor(distanceWalked) + '<span class="unit">m</span>';
   statOrbsEl.innerHTML = orbs.filter(o => o.collected).length + '<span class="unit">/' + ORB_TOTAL + '</span>';
-  const mins = Math.floor(elapsedTime / 60), secs = Math.floor(elapsedTime % 60);
-  statTimeEl.textContent = mins + ':' + String(secs).padStart(2, '0');
+  statTimeEl.textContent = formatTime(elapsedTime);
+
+  fpsAccum += dt; fpsFrames++;
+  if (fpsAccum >= 0.4){
+    fpsSmoothed = fpsFrames / fpsAccum;
+    statFpsEl.textContent = Math.round(fpsSmoothed);
+    fpsAccum = 0; fpsFrames = 0;
+  }
 }
 
 /* ============================================================
@@ -1822,12 +2092,10 @@ const loadTimer = setInterval(() => {
 
 camera.position.set(player.x, player.y + 3.3, player.z + cameraDist);
 camera.lookAt(player.x, player.y + 1.2, player.z);
+updateSunFollow(player.x, player.z);
 
 animate();
 
 </script>
 </body>
 </html>
-
-
-
