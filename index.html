@@ -204,6 +204,12 @@
   }
   .touch-btn.sprint{ right: calc(108px + var(--safe-r)); bottom: calc(30px + var(--safe-b)); width:52px; height:52px; background:rgba(90,138,95,0.22); border-color:var(--moss-dim); }
   .touch-btn.pressed{ transform:scale(0.9); filter:brightness(1.25); }
+  .touch-btn.ability{
+    width:46px; height:46px; font-size:10px; background:rgba(224,184,105,0.2); border-color:var(--gold-dim);
+  }
+  .touch-btn.ability.dash{ right: calc(30px + var(--safe-r)); bottom: calc(118px + var(--safe-b)); }
+  .touch-btn.ability.slam{ right: calc(108px + var(--safe-r)); bottom: calc(90px + var(--safe-b)); }
+  .touch-btn.ability.on-cooldown{ opacity:0.35; }
 
   /* ---------- overlays ---------- */
   .overlay{
@@ -363,6 +369,8 @@
   <div id="joy-base"><div id="joy-nub"></div></div>
   <div class="touch-btn sprint" id="btn-sprint-touch">SPRINT</div>
   <div class="touch-btn" id="btn-jump-touch">JUMP</div>
+  <div class="touch-btn ability dash" id="btn-dash-touch">DASH</div>
+  <div class="touch-btn ability slam" id="btn-slam-touch">SLAM</div>
 </div>
 
 <!-- ============ loading ============ -->
@@ -528,6 +536,16 @@ const JUMP_BUFFER     = 0.12; // seconds a jump press is remembered before landi
 const SLOPE_WALKABLE  = 0.62; // cosine of max walkable slope angle (~52°)
 const SLOPE_SLIDE     = 0.78; // cosine below which sliding kicks in fully
 const REDUCED_MOTION  = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---- abilities ---- */
+const DOUBLE_JUMP_SPEED   = JUMP_SPEED * 0.85;
+const DOUBLE_JUMP_COST    = 18;   // stamina
+const DASH_SPEED          = 15.5;
+const DASH_DURATION       = 0.16; // seconds the dash velocity is enforced
+const DASH_COOLDOWN       = 0.7;
+const DASH_COST           = 22;   // stamina
+const SLAM_FALL_SPEED     = -20;  // instantaneous downward velocity on activation
+const SLAM_MIN_AIR_TIME   = 0.12; // must be airborne at least this long to slam (no cheap taps at ground level)
 
 const ORB_TOTAL = 8;
 
@@ -1300,6 +1318,8 @@ const keys = new Set();
 window.addEventListener('keydown', (e) => {
   keys.add(e.code);
   if (e.code === 'Escape') togglePause();
+  if (e.code === 'KeyQ') tryDash();
+  if (e.code === 'KeyE') trySlam();
   if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
@@ -1469,6 +1489,10 @@ const SFX = {
   orb(){ tone(660, 0.12, 'sine', 0.1, 990); tone(990, 0.16, 'sine', 0.07, 1320); },
   quest(){ tone(392, 0.14, 'triangle', 0.09, 523); setTimeout(() => tone(523, 0.18, 'triangle', 0.09, 659), 120); },
   finale(){ [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.28, 'triangle', 0.1, f * 1.25), i * 130)); },
+  dash(){ noiseBurst(0.1, 0.06); tone(180, 0.12, 'sawtooth', 0.07, 60); },
+  doubleJump(){ tone(460, 0.1, 'triangle', 0.09, 720); tone(720, 0.12, 'sine', 0.06, 980); },
+  slamCharge(){ tone(220, 0.08, 'square', 0.05, 90); },
+  slamImpact(){ noiseBurst(0.22, 0.14); tone(90, 0.22, 'sine', 0.1, 45); },
 };
 
 
@@ -1733,7 +1757,12 @@ function updatePlayer(dt){
   const inp = readInput();
 
   _fwd.set(Math.sin(cameraYaw), 0, Math.cos(cameraYaw));
-  _right.set(Math.cos(cameraYaw), 0, -Math.sin(cameraYaw));
+  /* FIX: this was (cos, 0, -sin) — the mirror image of true camera-right
+     for this forward/up basis (right = forward × up). That sign error
+     made A/D and Left/Right arrows strafe — and since facing follows
+     the movement vector, therefore turn — toward the opposite side of
+     the screen from the key you pressed. */
+  _right.set(-Math.cos(cameraYaw), 0, Math.sin(cameraYaw));
   _moveDir.set(0, 0, 0).addScaledVector(_fwd, inp.z).addScaledVector(_right, inp.x);
   const hasInput = _moveDir.lengthSq() > 0.0001;
   if (hasInput) _moveDir.normalize();
