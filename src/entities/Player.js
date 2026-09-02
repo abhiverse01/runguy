@@ -2,13 +2,38 @@ import * as THREE from 'three';
 import { lerp, clamp, smoothstep } from '../utils/math.js';
 import { PHYSICS, STAMINA, ABILITIES } from '../config/constants.js';
 
-function makeLimb(geo, mat, x, y){
-  const pivot = new THREE.Group(); pivot.position.set(x, y, 0);
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.y = -geo.parameters.length / 2 - 0.04;
-  mesh.castShadow = true;
-  pivot.add(mesh);
-  return pivot;
+/** A two-segment limb (hip/shoulder pivot -> knee/elbow pivot -> end
+ *  cap) instead of one rigid capsule per limb. This is the single
+ *  biggest lever on "looks human" for a run cycle: a limb that only
+ *  swings from one root joint reads as a pendulum, not a leg. */
+function makeJointedLimb({ upperLen, lowerLen, radius, mat, x, y, endGeo, endMat, endOffsetY }){
+  const root = new THREE.Group(); root.position.set(x, y, 0);
+
+  const upperGeo = new THREE.CapsuleGeometry(radius, upperLen, 4, 8);
+  const upper = new THREE.Mesh(upperGeo, mat);
+  upper.position.y = -upperLen / 2 - radius;
+  upper.castShadow = true;
+  root.add(upper);
+
+  const joint = new THREE.Group();
+  joint.position.y = -upperLen - radius * 2;
+  root.add(joint);
+
+  const lowerGeo = new THREE.CapsuleGeometry(radius * 0.86, lowerLen, 4, 8);
+  const lower = new THREE.Mesh(lowerGeo, mat);
+  lower.position.y = -lowerLen / 2 - radius * 0.86;
+  lower.castShadow = true;
+  joint.add(lower);
+
+  let end = null;
+  if (endGeo){
+    end = new THREE.Mesh(endGeo, endMat);
+    end.position.y = -lowerLen - radius * 1.7 + (endOffsetY || 0);
+    end.castShadow = true;
+    joint.add(end);
+  }
+
+  return { root, joint, end };
 }
 
 export class Player {
@@ -59,62 +84,119 @@ export class Player {
   }
 
   _buildModel(scene){
-    const skinMat = new THREE.MeshStandardMaterial({ color: 0xe0a878, roughness: 0.8 });
-    const shirtMat = new THREE.MeshStandardMaterial({ color: 0x4c7a52, roughness: 0.7 });
-    const pantsMat = new THREE.MeshStandardMaterial({ color: 0x2c3a2e, roughness: 0.8 });
-    const shoeMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1c, roughness: 0.9 });
-    const scarfMat = new THREE.MeshStandardMaterial({ color: 0xc9814f, roughness: 0.6 });
-    const hairMat = new THREE.MeshStandardMaterial({ color: 0x2a1f16, roughness: 0.9 });
-    const packMat = new THREE.MeshStandardMaterial({ color: 0x5b3d22, roughness: 0.8 });
+    const skinMat = new THREE.MeshPhysicalMaterial({ color: 0xe0a878, roughness: 0.75, clearcoat: 0.06, clearcoatRoughness: 0.6 });
+    const shirtMat = new THREE.MeshPhysicalMaterial({ color: 0x3e6b46, roughness: 0.65, sheen: 0.6, sheenColor: new THREE.Color(0x9fc9a6) });
+    const jacketMat = new THREE.MeshPhysicalMaterial({ color: 0x2f5238, roughness: 0.55, sheen: 0.4, sheenColor: new THREE.Color(0x7aa87f) });
+    const pantsMat = new THREE.MeshStandardMaterial({ color: 0x28352a, roughness: 0.85 });
+    const shoeMat = new THREE.MeshStandardMaterial({ color: 0x33241a, roughness: 0.55, metalness: 0.05 });
+    const soleMat = new THREE.MeshStandardMaterial({ color: 0x141210, roughness: 0.9 });
+    const scarfMat = new THREE.MeshPhysicalMaterial({ color: 0xc9814f, roughness: 0.5, sheen: 0.7, sheenColor: new THREE.Color(0xe0a878) });
+    const hairMat = new THREE.MeshStandardMaterial({ color: 0x241a11, roughness: 0.65 });
+    const packMat = new THREE.MeshStandardMaterial({ color: 0x4a3018, roughness: 0.75 });
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1a1410, roughness: 0.3 });
+    const browMat = hairMat;
 
     this.group = new THREE.Group();
 
     this.spine = new THREE.Group();
-    this.spine.position.y = 0.72;
+    this.spine.position.y = 0.74;
     this.group.add(this.spine);
 
-    this.torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.5, 4, 8), shirtMat);
+    this.torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.25, 0.46, 6, 12), jacketMat);
     this.torso.position.y = 0.34; this.torso.castShadow = true;
     this.spine.add(this.torso);
 
-    const hip = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.14, 4, 8), pantsMat);
+    // jacket collar — small detail that reads immediately as "clothed",
+    // not just a capsule with a color
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.035, 6, 12, Math.PI * 1.3), jacketMat);
+    collar.position.set(0, 0.58, -0.02);
+    collar.rotation.set(Math.PI / 2.3, 0, Math.PI * 0.35);
+    collar.castShadow = true;
+    this.spine.add(collar);
+
+    // half-zip strip down the front of the jacket
+    const zip = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.34, 0.02), new THREE.MeshStandardMaterial({ color: 0x8a8a86, metalness: 0.6, roughness: 0.35 }));
+    zip.position.set(0, 0.4, 0.25);
+    this.spine.add(zip);
+
+    const hip = new THREE.Mesh(new THREE.CapsuleGeometry(0.23, 0.12, 4, 10), pantsMat);
     hip.position.y = 0; hip.castShadow = true;
     this.spine.add(hip);
 
-    // backpack — new prop on the character, reads well in third person
-    const pack = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.36, 0.16), packMat);
-    pack.position.set(0, 0.32, -0.24);
+    // backpack with a top flap + a strap detail
+    const pack = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.35, 0.15), packMat);
+    pack.position.set(0, 0.32, -0.23);
     pack.castShadow = true;
     this.spine.add(pack);
+    const packFlap = new THREE.Mesh(new THREE.BoxGeometry(0.29, 0.1, 0.17), packMat);
+    packFlap.position.set(0, 0.47, -0.23);
+    packFlap.rotation.x = -0.15;
+    packFlap.castShadow = true;
+    this.spine.add(packFlap);
 
     this.head = new THREE.Group();
-    this.head.position.y = 0.84;
+    this.head.position.y = 0.86;
     this.spine.add(this.head);
-    const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.22, 14, 12), skinMat);
+    const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.215, 20, 16), skinMat);
+    headMesh.scale.set(1, 1.08, 0.94);
     headMesh.castShadow = true;
     this.head.add(headMesh);
-    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.225, 12, 10, 0, Math.PI * 2, 0, Math.PI / 1.7), hairMat);
-    hair.position.y = 0.04; hair.castShadow = true;
+    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.222, 16, 14, 0, Math.PI * 2, 0, Math.PI / 1.7), hairMat);
+    hair.position.y = 0.05; hair.castShadow = true;
     this.head.add(hair);
 
-    this.scarf = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.055, 6, 14), scarfMat);
+    // simple readable face: two eyes + brows, enough to make the head
+    // stop reading as a blank ball at third-person distance
+    const eyeGeo = new THREE.SphereGeometry(0.022, 8, 8);
+    [-1, 1].forEach(side => {
+      const eye = new THREE.Mesh(eyeGeo, eyeMat);
+      eye.position.set(side * 0.075, 0.02, 0.185);
+      this.head.add(eye);
+      const brow = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.016, 0.02), browMat);
+      brow.position.set(side * 0.075, 0.065, 0.19);
+      brow.rotation.z = side * 0.12;
+      this.head.add(brow);
+    });
+
+    this.scarf = new THREE.Mesh(new THREE.TorusGeometry(0.165, 0.05, 8, 16), scarfMat);
     this.scarf.position.y = 0.6; this.scarf.rotation.x = Math.PI / 2.2; this.scarf.castShadow = true;
     this.spine.add(this.scarf);
+    // trailing scarf tail for a bit of cloth motion when running/dashing
+    this.scarfTail = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.22, 0.02), scarfMat);
+    this.scarfTail.position.set(0.08, 0.48, -0.16);
+    this.scarfTail.castShadow = true;
+    this.spine.add(this.scarfTail);
 
-    const legGeo = new THREE.CapsuleGeometry(0.09, 0.42, 4, 6);
-    const armGeo = new THREE.CapsuleGeometry(0.07, 0.36, 4, 6);
-    const shoeGeo = new THREE.BoxGeometry(0.13, 0.08, 0.2);
+    const shoeGeo = new THREE.BoxGeometry(0.135, 0.075, 0.21);
+    const soleGeo = new THREE.BoxGeometry(0.14, 0.03, 0.22);
 
-    this.legL = makeLimb(legGeo, pantsMat, -0.13, -0.1);
-    this.legR = makeLimb(legGeo, pantsMat, 0.13, -0.1);
-    const shoeL = new THREE.Mesh(shoeGeo, shoeMat); shoeL.position.y = -0.46; shoeL.position.z = 0.05; shoeL.castShadow = true;
-    const shoeR = shoeL.clone();
-    this.legL.add(shoeL); this.legR.add(shoeR);
+    this.legL = makeJointedLimb({
+      upperLen: 0.32, lowerLen: 0.3, radius: 0.085, mat: pantsMat, x: -0.13, y: -0.06,
+      endGeo: shoeGeo, endMat: shoeMat, endOffsetY: 0.02,
+    });
+    this.legR = makeJointedLimb({
+      upperLen: 0.32, lowerLen: 0.3, radius: 0.085, mat: pantsMat, x: 0.13, y: -0.06,
+      endGeo: shoeGeo, endMat: shoeMat, endOffsetY: 0.02,
+    });
+    [this.legL, this.legR].forEach(leg => {
+      const sole = new THREE.Mesh(soleGeo, soleMat);
+      sole.position.y = leg.end.position.y - 0.045;
+      sole.castShadow = true;
+      leg.joint.add(sole);
+    });
 
-    this.armL = makeLimb(armGeo, shirtMat, -0.31, 0.56);
-    this.armR = makeLimb(armGeo, shirtMat, 0.31, 0.56);
+    this.armL = makeJointedLimb({ upperLen: 0.28, lowerLen: 0.26, radius: 0.065, mat: jacketMat, x: -0.3, y: 0.56 });
+    this.armR = makeJointedLimb({ upperLen: 0.28, lowerLen: 0.26, radius: 0.065, mat: jacketMat, x: 0.3, y: 0.56 });
+    // hands
+    const handGeo = new THREE.SphereGeometry(0.06, 10, 8);
+    [this.armL, this.armR].forEach(arm => {
+      const hand = new THREE.Mesh(handGeo, skinMat);
+      hand.position.y = -0.26 - 0.065;
+      hand.castShadow = true;
+      arm.joint.add(hand);
+    });
 
-    this.spine.add(this.legL, this.legR, this.armL, this.armR);
+    this.spine.add(this.legL.root, this.legR.root, this.armL.root, this.armR.root);
     this.group.traverse(o => { if (o.isMesh) o.castShadow = true; });
     scene.add(this.group);
 
@@ -123,7 +205,7 @@ export class Player {
     scene.add(this.pointLight);
 
     const shadowBlobMat = new THREE.MeshBasicMaterial({ color: 0x0a1108, transparent: true, opacity: 0.28, depthWrite: false });
-    this.shadowBlob = new THREE.Mesh(new THREE.CircleGeometry(0.42, 16), shadowBlobMat);
+    this.shadowBlob = new THREE.Mesh(new THREE.CircleGeometry(0.42, 20), shadowBlobMat);
     this.shadowBlob.rotation.x = -Math.PI / 2;
     scene.add(this.shadowBlob);
   }
@@ -187,9 +269,9 @@ export class Player {
     this.hasMoveInput = hasInput;
 
     const canSprint = this.stamina > STAMINA.MIN_TO_SPRINT;
-    this.sprinting = inp.sprint && hasInput && canSprint && !this.wading && !this.dashing;
+    this.sprinting = hasInput && inp.sprint && canSprint && !this.wading;
     if (this.sprinting) this.stamina = Math.max(0, this.stamina - STAMINA.SPRINT_DRAIN * dt);
-    else if (!this.dashing) this.stamina = Math.min(STAMINA.MAX, this.stamina + STAMINA.REGEN * dt);
+    else this.stamina = Math.min(STAMINA.MAX, this.stamina + STAMINA.REGEN * dt);
 
     this._updateAbilityTimers(dt);
 
@@ -355,28 +437,40 @@ export class Player {
     if (this.grounded && speedRatio > 0.02){
       this.runCycle += dt * (5 + speedRatio * 5);
       const swing = Math.sin(this.runCycle) * (0.5 + speedRatio * 0.4);
-      this.legL.rotation.x = swing; this.legR.rotation.x = -swing;
-      this.armL.rotation.x = -swing * 0.85; this.armR.rotation.x = swing * 0.85;
+      this.legL.root.rotation.x = swing; this.legR.root.rotation.x = -swing;
+      // knee bends while that leg is swinging forward (positive half of
+      // its own cycle) — approximate but reads as a real gait, not a
+      // straight-leg pendulum
+      this.legL.joint.rotation.x = -Math.max(0, Math.sin(this.runCycle)) * (0.8 + speedRatio * 0.5);
+      this.legR.joint.rotation.x = -Math.max(0, -Math.sin(this.runCycle)) * (0.8 + speedRatio * 0.5);
+      this.armL.root.rotation.x = -swing * 0.85; this.armR.root.rotation.x = swing * 0.85;
+      this.armL.joint.rotation.x = -Math.max(0, -Math.sin(this.runCycle)) * 0.5;
+      this.armR.joint.rotation.x = -Math.max(0, Math.sin(this.runCycle)) * 0.5;
       this.torso.rotation.z = Math.sin(this.runCycle) * 0.03;
-      this.spine.position.y = 0.72 + Math.abs(Math.sin(this.runCycle * 2)) * 0.03 * speedRatio;
+      this.spine.position.y = 0.74 + Math.abs(Math.sin(this.runCycle * 2)) * 0.03 * speedRatio;
     } else if (!this.grounded){
       const airPose = this.slamActive ? 1 : 0.5;
-      this.legL.rotation.x = lerp(this.legL.rotation.x, 0.35 * airPose, 0.15);
-      this.legR.rotation.x = lerp(this.legR.rotation.x, -0.5 * airPose, 0.15);
-      this.armL.rotation.x = lerp(this.armL.rotation.x, this.slamActive ? -1.1 : -0.3, 0.15);
-      this.armR.rotation.x = lerp(this.armR.rotation.x, this.slamActive ? -1.1 : 0.5, 0.15);
-      this.spine.position.y = lerp(this.spine.position.y, 0.72, 0.1);
+      this.legL.root.rotation.x = lerp(this.legL.root.rotation.x, 0.35 * airPose, 0.15);
+      this.legR.root.rotation.x = lerp(this.legR.root.rotation.x, -0.5 * airPose, 0.15);
+      this.legL.joint.rotation.x = lerp(this.legL.joint.rotation.x, -0.7 * airPose, 0.15);
+      this.legR.joint.rotation.x = lerp(this.legR.joint.rotation.x, -0.9 * airPose, 0.15);
+      this.armL.root.rotation.x = lerp(this.armL.root.rotation.x, this.slamActive ? -1.1 : -0.3, 0.15);
+      this.armR.root.rotation.x = lerp(this.armR.root.rotation.x, this.slamActive ? -1.1 : 0.5, 0.15);
+      this.spine.position.y = lerp(this.spine.position.y, 0.74, 0.1);
     } else {
-      this.legL.rotation.x = lerp(this.legL.rotation.x, 0, 0.1); this.legR.rotation.x = lerp(this.legR.rotation.x, 0, 0.1);
-      this.armL.rotation.x = lerp(this.armL.rotation.x, 0, 0.1); this.armR.rotation.x = lerp(this.armR.rotation.x, 0, 0.1);
+      this.legL.root.rotation.x = lerp(this.legL.root.rotation.x, 0, 0.1); this.legR.root.rotation.x = lerp(this.legR.root.rotation.x, 0, 0.1);
+      this.legL.joint.rotation.x = lerp(this.legL.joint.rotation.x, 0, 0.1); this.legR.joint.rotation.x = lerp(this.legR.joint.rotation.x, 0, 0.1);
+      this.armL.root.rotation.x = lerp(this.armL.root.rotation.x, 0, 0.1); this.armR.root.rotation.x = lerp(this.armR.root.rotation.x, 0, 0.1);
+      this.armL.joint.rotation.x = lerp(this.armL.joint.rotation.x, -0.12, 0.1); this.armR.joint.rotation.x = lerp(this.armR.joint.rotation.x, -0.12, 0.1);
       this.torso.rotation.z = lerp(this.torso.rotation.z, 0, 0.1);
-      this.spine.position.y = lerp(this.spine.position.y, 0.72, 0.1);
+      this.spine.position.y = lerp(this.spine.position.y, 0.74, 0.1);
       this.runCycle = 0;
       // idle breathing
       const breathe = 1 + Math.sin(performance.now() * 0.0016) * 0.012;
       this.torso.scale.set(1, breathe, 1);
     }
     this.scarf.rotation.z = Math.sin(performance.now() * 0.003) * 0.08 + (this.dashing ? 0.4 : 0);
+    this.scarfTail.rotation.x = Math.sin(performance.now() * 0.004) * 0.15 + clamp(Math.hypot(this.vx, this.vz) * 0.05, 0, 0.5) + (this.dashing ? 0.9 : 0);
     if (this.dashing) this.spine.rotation.x = lerp(this.spine.rotation.x, 0.35, 0.3);
     else this.spine.rotation.x = lerp(this.spine.rotation.x, 0, 0.2);
   }

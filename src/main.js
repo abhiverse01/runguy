@@ -1,6 +1,12 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { mulberry32 } from './utils/math.js';
 import { Q } from './config/constants.js';
+import { pickRandomEnvironment } from './world/EnvironmentPresets.js';
 
 import { RiverPath } from './world/RiverPath.js';
 import { Terrain } from './world/Terrain.js';
@@ -24,6 +30,13 @@ import { Overlays } from './ui/Overlays.js';
 const RNG_SEED = 1337;
 const rng = mulberry32(RNG_SEED);
 
+// World layout (terrain shape, tree/rock/orb placement) stays fully
+// deterministic off the seeded RNG above. Only the *atmosphere* — sky,
+// sun, fog, water tint, grass tint, exposure — is re-rolled with plain
+// Math.random() every load, so the same map feels like a different
+// place to run through each time without the game itself changing.
+const envPreset = pickRandomEnvironment();
+
 // ---------------------------------------------------------------
 // Renderer / scene / camera
 // ---------------------------------------------------------------
@@ -44,12 +57,12 @@ const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerH
 // World
 // ---------------------------------------------------------------
 const riverPath = new RiverPath();
-const terrain = new Terrain(riverPath, rng);
+const skyEnv = new SkyEnvironment(scene, renderer, rng, envPreset);
+
+const terrain = new Terrain(riverPath, rng, envPreset);
 scene.add(terrain.group);
 
-const skyEnv = new SkyEnvironment(scene, renderer, rng);
-
-const river = new River(riverPath, skyEnv.sunDir);
+const river = new River(riverPath, skyEnv.sunDir, envPreset);
 scene.add(river.group);
 
 const bridges = new Bridges(riverPath, rng);
@@ -60,6 +73,42 @@ scene.add(vegetation.group);
 // Player collision reads a single obstacle list off the terrain —
 // vegetation is what populates it.
 terrain.obstacles = vegetation.obstacles;
+
+// ---------------------------------------------------------------
+// Post-processing — a small, cheap finishing stack: subtle bloom off
+// specular highlights (water glints, lanterns) plus a gentle filmic
+// vignette/contrast pass. Deliberately minimal — no SSAO/TAA — so it
+// stays smooth on modest hardware; disabled outright on touch/low
+// quality devices where the frame budget matters more than polish.
+// ---------------------------------------------------------------
+const usePost = Q.props >= 1;
+let composer = null;
+if (usePost){
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+
+  const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.35, 0.55, 0.86);
+  composer.addPass(bloom);
+
+  const finishShader = {
+    uniforms: { tDiffuse: { value: null }, uVignette: { value: 0.32 }, uContrast: { value: 1.05 } },
+    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `
+      uniform sampler2D tDiffuse; uniform float uVignette; uniform float uContrast;
+      varying vec2 vUv;
+      void main(){
+        vec4 c = texture2D(tDiffuse, vUv);
+        c.rgb = (c.rgb - 0.5) * uContrast + 0.5;
+        vec2 d = vUv - 0.5;
+        float vig = 1.0 - smoothstep(0.35, 0.9, length(d)) * uVignette;
+        c.rgb *= vig;
+        gl_FragColor = c;
+      }`,
+  };
+  const finishPass = new ShaderPass(finishShader);
+  composer.addPass(finishPass);
+  composer.addPass(new OutputPass());
+}
 
 // ---------------------------------------------------------------
 // Systems
@@ -100,7 +149,7 @@ const overlays = new Overlays({
   renderer, scene, input, audio, hud,
   onQualityChange: (quality) => {
     renderer.setPixelRatio(Q.pixelRatio);
-    scene.fog.far = Q.fogFar;
+    scene.fog.far = Q.fogFar * envPreset.fogFarMul;
   },
 });
 overlays.onPauseSummaryRequest = () => {
@@ -164,13 +213,15 @@ function animate(){
     cameraController.update(dt, false);
   }
 
-  renderer.render(scene, camera);
+  if (composer) composer.render();
+  else renderer.render(scene, camera);
 }
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  if (composer) composer.setSize(window.innerWidth, window.innerHeight);
 });
 
 skyEnv.followShadowTo(player.x, player.z);

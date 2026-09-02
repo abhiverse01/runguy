@@ -4,29 +4,31 @@ import { degToRad } from '../utils/math.js';
 import { Q, REDUCED_MOTION } from '../config/constants.js';
 
 export class SkyEnvironment {
-  constructor(scene, renderer, rng){
+  /** @param {object} preset one entry from EnvironmentPresets.js */
+  constructor(scene, renderer, rng, preset){
     this.scene = scene;
     this.rng = rng;
+    this.preset = preset;
 
     this.sky = new Sky();
     this.sky.scale.setScalar(9000);
     scene.add(this.sky);
 
-    const sunElevation = 34, sunAzimuth = 200;
     this.sunDir = new THREE.Vector3();
-    const phi = degToRad(90 - sunElevation);
-    const theta = degToRad(sunAzimuth);
+    const phi = degToRad(90 - preset.sunElevation);
+    const theta = degToRad(preset.sunAzimuth);
     this.sunDir.setFromSphericalCoords(1, phi, theta);
     const u = this.sky.material.uniforms;
-    u['turbidity'].value = 4.2;
-    u['rayleigh'].value = 1.7;
-    u['mieCoefficient'].value = 0.0048;
-    u['mieDirectionalG'].value = 0.82;
+    u['turbidity'].value = preset.sky.turbidity;
+    u['rayleigh'].value = preset.sky.rayleigh;
+    u['mieCoefficient'].value = preset.sky.mieCoefficient;
+    u['mieDirectionalG'].value = preset.sky.mieDirectionalG;
     u['sunPosition'].value.copy(this.sunDir);
 
-    this.horizonColor = new THREE.Color(0xcfe6df);
-    scene.fog = new THREE.Fog(this.horizonColor.getHex(), 70, Q.fogFar);
+    this.horizonColor = new THREE.Color(preset.fogColor);
+    scene.fog = new THREE.Fog(this.horizonColor.getHex(), 70 * preset.fogNearMul, Q.fogFar * preset.fogFarMul);
     renderer.setClearColor(this.horizonColor);
+    renderer.toneMappingExposure = preset.exposure;
 
     // baked image-based lighting from the sky dome
     const pmrem = new THREE.PMREMGenerator(renderer);
@@ -39,7 +41,7 @@ export class SkyEnvironment {
     envSky.geometry.dispose();
     envSky.material.dispose();
 
-    this.sunLight = new THREE.DirectionalLight(0xfff3da, 3.1);
+    this.sunLight = new THREE.DirectionalLight(preset.sunColor, preset.sunIntensity);
     this.sunLight.position.copy(this.sunDir).multiplyScalar(140);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.set(Q.shadow, Q.shadow);
@@ -51,11 +53,20 @@ export class SkyEnvironment {
     this.sunLight.shadow.camera.bottom = -46;
     this.sunLight.shadow.bias = -0.0015;
     this.sunLight.shadow.normalBias = 0.02;
+    // slightly softer shadows read more "real" than crisp low-res PCF edges
+    this.sunLight.shadow.radius = 2.4;
     scene.add(this.sunLight);
     scene.add(this.sunLight.target);
 
-    this.hemi = new THREE.HemisphereLight(0xcfe6ff, 0x5a6b45, 0.65);
+    this.hemi = new THREE.HemisphereLight(preset.hemiSky, preset.hemiGround, preset.hemiIntensity);
     scene.add(this.hemi);
+
+    // a very low, cool fill light from the opposite side of the sun so
+    // shadowed faces never go fully flat/black — cheap, one extra light
+    this.fill = new THREE.DirectionalLight(0xaecbe0, 0.35);
+    this.fill.position.copy(this.sunDir).multiplyScalar(-80);
+    this.fill.position.y = Math.abs(this.fill.position.y) + 30;
+    scene.add(this.fill);
 
     this._buildClouds();
   }
@@ -72,8 +83,11 @@ export class SkyEnvironment {
 
   _buildClouds(){
     this.cloudGroup = new THREE.Group();
-    const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, transparent: true, opacity: 0.85, fog: false });
-    const puffGeo = new THREE.IcosahedronGeometry(1, 0);
+    const cloudMat = new THREE.MeshStandardMaterial({
+      color: this.preset.cloudColor, roughness: 1, transparent: true,
+      opacity: this.preset.cloudOpacity, fog: false,
+    });
+    const puffGeo = new THREE.IcosahedronGeometry(1, 1);
     this.clouds = [];
     for (let i = 0; i < 14; i++){
       const cloud = new THREE.Group();
